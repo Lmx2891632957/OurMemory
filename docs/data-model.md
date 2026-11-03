@@ -113,7 +113,6 @@ interface PostRepository {
         place: PlaceSelection?,
         mood: Mood? = null,
     ): Long
-    suspend fun update(id: Long, caption: String, place: PlaceSelection?, mood: Mood?)
     suspend fun setLiked(id: Long, liked: Boolean)
     suspend fun delete(id: Long)                     // 软删除 + 删除本地文件
     fun photoFile(fileName: String): File
@@ -121,6 +120,7 @@ interface PostRepository {
 ```
 
 **约束**：UI 只依赖这个接口；换成本地/远程混合实现时，UI 不改。
+本期**不提供 update**（不做编辑），未来若需要再加，不预留空方法。
 
 ### 4.2 未来同步接口（现在只定义，不实现）
 

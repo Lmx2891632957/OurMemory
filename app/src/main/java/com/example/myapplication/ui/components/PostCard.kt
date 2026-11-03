@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.myapplication.data.Post
@@ -47,7 +49,7 @@ import java.io.File
 @Composable
 fun PostCard(
     post: Post,
-    photoFile: File?,
+    photoFiles: List<File>,
     onToggleLike: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -128,19 +130,14 @@ fun PostCard(
                 }
             }
 
-            AsyncImage(
-                model = photoFile,
-                contentDescription = "记录照片",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(4f / 3f),
-            )
+            PhotoGrid(photos = photoFiles)
 
             if (post.caption.isNotBlank()) {
                 Text(
                     text = post.caption,
                     style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
@@ -183,5 +180,48 @@ fun PostCard(
                 TextButton(onClick = { confirmDelete = false }) { Text("取消") }
             },
         )
+    }
+}
+
+/**
+ * 信息流卡片里的照片排版：1 张 4:3 大图，2 张并排，4 张 2×2，其余 3 列九宫格。
+ * 图片之间留 2dp 缝，保持卡片整体圆角。
+ */
+@Composable
+private fun PhotoGrid(photos: List<File>) {
+    if (photos.isEmpty()) return
+
+    if (photos.size == 1) {
+        AsyncImage(
+            model = photos.first(),
+            contentDescription = "记录照片",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(4f / 3f),
+        )
+        return
+    }
+
+    val columns = if (photos.size == 2 || photos.size == 4) 2 else 3
+    Column(modifier = Modifier.fillMaxWidth()) {
+        photos.chunked(columns).forEachIndexed { rowIndex, row ->
+            if (rowIndex > 0) Spacer(Modifier.height(2.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                row.forEach { photo ->
+                    AsyncImage(
+                        model = photo,
+                        contentDescription = "记录照片",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f),
+                    )
+                }
+                repeat(columns - row.size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
     }
 }

@@ -74,8 +74,6 @@ dependencies {
     // 3dmap 9.8.3 自带定位 SDK，且与 search 9.7.1 无重复类；10.0.600 会与 search 冲突
     implementation(libs.amap.map)
     implementation(libs.amap.search)
-    // TODO(amap): 地图页替换完成后移除 osmdroid
-    implementation(libs.osmdroid.android)
     implementation(libs.coil.compose)
 
     testImplementation(libs.junit)

@@ -1,8 +1,17 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+// 高德 Key 放在 local.properties（本机配置，不入库），通过 manifestPlaceholders 注入
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val amapKey: String = localProperties.getProperty("AMAP_KEY").orEmpty()
 
 android {
     namespace = "com.example.myapplication"
@@ -14,10 +23,17 @@ android {
         applicationId = "com.example.myapplication"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        manifestPlaceholders["AMAP_KEY"] = amapKey
+
+        // 高德 SDK 自带 4 个 ABI 的 so，只保留真机常见的两个，APK 从 67MB 降到 ~40MB
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
@@ -60,8 +76,9 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    implementation(libs.play.services.location)
-    implementation(libs.osmdroid.android)
+    // 3dmap 9.8.3 自带定位 SDK，且与 search 9.7.1 无重复类；10.0.600 会与 search 冲突
+    implementation(libs.amap.map)
+    implementation(libs.amap.search)
     implementation(libs.coil.compose)
 
     testImplementation(libs.junit)

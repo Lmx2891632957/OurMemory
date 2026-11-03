@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,32 +43,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.amap.api.maps.AMap
+import com.amap.api.maps.CameraUpdateFactory
+import com.amap.api.maps.MapView
+import com.amap.api.maps.model.CameraPosition
+import com.amap.api.maps.model.LatLng
 import com.example.myapplication.AppContainer
 import com.example.myapplication.data.PlaceSelection
+import com.example.myapplication.data.location.AmapPrivacy
+import com.example.myapplication.data.location.NearbyPlace
 import com.example.myapplication.ui.components.hasPermission
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.osmdroid.config.Configuration
-import org.osmdroid.events.MapListener
-import org.osmdroid.events.ScrollEvent
-import org.osmdroid.events.ZoomEvent
-import org.osmdroid.tileprovider.tilesource.XYTileSource
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import java.io.File
-
-/**
- * OSM 官方瓦片在部分地区（含国内网络环境）访问不稳定，这里用同样免 Key 的
- * OpenStreetMap.de 镜像；若仍加载不出来，界面会退化为"坐标 + 使用此地点"。
- */
-private val OSM_DE_TILES = XYTileSource(
-    "OpenStreetMap.de",
-    0,
-    19,
-    256,
-    ".png",
-    arrayOf("https://tile.openstreetmap.de/"),
-)
 
 private const val DEFAULT_LAT = 39.9087
 private const val DEFAULT_LNG = 116.3975
@@ -78,31 +71,44 @@ fun LocationPickerScreen(
     onPicked: (PlaceSelection) -> Unit,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     val hasInitial = initialLatitude != 0.0 || initialLongitude != 0.0
 
-    var centerLatitude by remember { mutableStateOf(if (hasInitial) initialLatitude else DEFAULT_LAT) }
-    var centerLongitude by remember { mutableStateOf(if (hasInitial) initialLongitude else DEFAULT_LNG) }
+    var center by remember {
+        mutableStateOf(
+            if (hasInitial) LatLng(initialLatitude, initialLongitude) else LatLng(DEFAULT_LAT, DEFAULT_LNG),
+        )
+    }
+    var mapView by remember { mutableStateOf<MapView?>(null) }
     var currentLabel by remember { mutableStateOf<String?>(null) }
+    var nearby by remember { mutableStateOf<List<NearbyPlace>>(emptyList()) }
     var resolving by remember { mutableStateOf(false) }
     var ready by remember { mutableStateOf(hasInitial) }
-    var mapView by remember { mutableStateOf<MapView?>(null) }
-    val scope = rememberCoroutineScope()
+
+    val coordinatesText = "%.5f, %.5f".format(center.latitude, center.longitude)
+
+    fun moveTo(latLng: LatLng) {
+        center = latLng
+        mapView?.map?.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 17f))
+    }
 
     val recenterToCurrentLocation: () -> Unit = {
         scope.launch {
             val coordinates = runCatching { container.locationClient.currentCoordinates() }.getOrNull()
             if (coordinates != null) {
-                centerLatitude = coordinates.latitude
-                centerLongitude = coordinates.longitude
-                mapView?.controller?.setCenter(GeoPoint(coordinates.latitude, coordinates.longitude))
-                mapView?.controller?.setZoom(16.0)
+                moveTo(LatLng(coordinates.latitude, coordinates.longitude))
+                ready = true
             }
         }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { granted -> if (granted) recenterToCurrentLocation() }
+    ) { granted ->
+        ready = true
+        if (granted) recenterToCurrentLocation()
+    }
 
     LaunchedEffect(Unit) {
         if (hasInitial) return@LaunchedEffect
@@ -110,8 +116,8 @@ fun LocationPickerScreen(
             context.hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
         if (granted) {
             container.locationClient.currentCoordinates()?.let {
-                centerLatitude = it.latitude
-                centerLongitude = it.longitude
+                center = LatLng(it.latitude, it.longitude)
+                mapView?.map?.moveCamera(CameraUpdateFactory.newLatLngZoom(center, 17f))
             }
         } else {
             permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -119,65 +125,76 @@ fun LocationPickerScreen(
         ready = true
     }
 
-    LaunchedEffect(ready, centerLatitude, centerLongitude) {
-        if (!ready) return@LaunchedEffect
+    // 地图停止移动后做逆地理，拿中文地址 + 附近 POI
+    LaunchedEffect(center.latitude, center.longitude) {
         resolving = true
-        delay(500)
-        currentLabel = runCatching {
-            container.placeResolver.labelFor(centerLatitude, centerLongitude)
-        }.getOrNull() ?: "%.5f, %.5f".format(centerLatitude, centerLongitude)
+        delay(400)
+        val details = runCatching {
+            container.placeResolver.detailsFor(center.latitude, center.longitude)
+        }.getOrNull()
+        currentLabel = details?.label
+        nearby = details?.nearby.orEmpty()
         resolving = false
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (ready) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    Configuration.getInstance().apply {
-                        userAgentValue = ctx.packageName
-                        osmdroidBasePath = File(ctx.cacheDir, "osmdroid")
-                        osmdroidTileCache = File(ctx.cacheDir, "osmdroid/tiles")
-                    }
-                    MapView(ctx).apply {
-                        mapView = this
-                        setTileSource(OSM_DE_TILES)
-                        setMultiTouchControls(true)
-                        controller.setZoom(16.0)
-                        controller.setCenter(GeoPoint(centerLatitude, centerLongitude))
-                        addMapListener(object : MapListener {
-                            override fun onScroll(event: ScrollEvent?): Boolean {
-                                mapCenter?.let {
-                                    centerLatitude = it.latitude
-                                    centerLongitude = it.longitude
-                                }
-                                return false
-                            }
-
-                            override fun onZoom(event: ZoomEvent?): Boolean {
-                                mapCenter?.let {
-                                    centerLatitude = it.latitude
-                                    centerLongitude = it.longitude
-                                }
-                                return false
-                            }
-                        })
-                    }
-                },
-                onRelease = { it.onDetach() },
-            )
-
-            // 屏幕正中的固定图钉
-            Icon(
-                Icons.Filled.Place,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(44.dp)
-                    .padding(bottom = 36.dp),
-            )
+    DisposableEffect(lifecycleOwner, mapView) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> mapView?.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView?.onPause()
+                else -> Unit
+            }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            mapView?.onPause()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                AmapPrivacy.applyCompliance(ctx)
+                MapView(ctx).apply {
+                    onCreate(null)
+                    onResume()
+                    map.uiSettings.apply {
+                        isZoomControlsEnabled = false
+                        isCompassEnabled = false
+                        isScaleControlsEnabled = false
+                        isRotateGesturesEnabled = false
+                        isTiltGesturesEnabled = false
+                    }
+                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(center, 17f))
+                    map.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
+                        override fun onCameraChange(position: CameraPosition?) = Unit
+
+                        override fun onCameraChangeFinish(position: CameraPosition?) {
+                            position?.target?.let { target ->
+                                if (target.latitude != center.latitude || target.longitude != center.longitude) {
+                                    center = target
+                                }
+                            }
+                        }
+                    })
+                    mapView = this
+                }
+            },
+            onRelease = { it.onDestroy() },
+        )
+
+        // 屏幕正中的固定图钉
+        Icon(
+            Icons.Filled.Place,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .size(44.dp)
+                .padding(bottom = 36.dp),
+        )
 
         Row(
             modifier = Modifier
@@ -187,10 +204,25 @@ fun LocationPickerScreen(
         ) {
             Surface(
                 shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
             ) {
                 IconButton(onClick = onClose) {
                     Icon(Icons.Filled.Close, contentDescription = "关闭")
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            ) {
+                TextButton(onClick = {
+                    val granted = context.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) ||
+                        context.hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                    if (granted) recenterToCurrentLocation() else {
+                        permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                    }
+                }) {
+                    Text("回到我的位置")
                 }
             }
         }
@@ -209,11 +241,10 @@ fun LocationPickerScreen(
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
                     }
-                    val coordinatesText = "%.5f, %.5f".format(centerLatitude, centerLongitude)
                     Text(
                         text = when {
-                            currentLabel == null -> "拖动地图选择位置"
-                            currentLabel == coordinatesText -> "选中的位置"
+                            !ready -> "正在定位…"
+                            currentLabel.isNullOrBlank() -> "选中的位置"
                             else -> currentLabel.orEmpty()
                         },
                         style = MaterialTheme.typography.titleMedium,
@@ -222,29 +253,45 @@ fun LocationPickerScreen(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "%.5f, %.5f".format(centerLatitude, centerLongitude),
+                    text = coordinatesText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                if (nearby.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "附近地点",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(nearby, key = { it.name }) { place ->
+                            FilterChip(
+                                selected = place.name == currentLabel,
+                                onClick = {
+                                    currentLabel = place.name
+                                    if (place.latitude != 0.0 && place.longitude != 0.0) {
+                                        moveTo(LatLng(place.latitude, place.longitude))
+                                    }
+                                },
+                                label = { Text(place.name) },
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = {
-                        val granted = context.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) ||
-                            context.hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
-                        if (granted) recenterToCurrentLocation() else {
-                            permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                        }
-                    }) {
-                        Text("回到我的位置")
-                    }
                     Spacer(Modifier.weight(1f))
                     Button(
                         onClick = {
                             onPicked(
                                 PlaceSelection(
-                                    latitude = centerLatitude,
-                                    longitude = centerLongitude,
-                                    label = currentLabel ?: "%.5f, %.5f".format(centerLatitude, centerLongitude),
+                                    latitude = center.latitude,
+                                    longitude = center.longitude,
+                                    label = currentLabel?.takeIf { it.isNotBlank() } ?: coordinatesText,
                                 ),
                             )
                         },

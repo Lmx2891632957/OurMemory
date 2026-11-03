@@ -65,7 +65,8 @@ class ComposerViewModel(
             )
             uiState = uiState.copy(locating = false, place = provisional)
 
-            val label = runCatching {
+            // 高德定位通常已经带回地址/POI，能省掉一次逆地理调用
+            val label = coordinates.displayLabel() ?: runCatching {
                 placeResolver.labelFor(coordinates.latitude, coordinates.longitude)
             }.getOrNull()
             if (label != null && uiState.place?.label == provisional.label) {

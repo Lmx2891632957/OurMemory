@@ -23,8 +23,8 @@ android {
         applicationId = "com.example.myapplication"
         minSdk = 24
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -78,7 +78,9 @@ dependencies {
 
     // 3dmap 9.8.3 自带定位 SDK，且与 search 9.7.1 无重复类；10.0.600 会与 search 冲突
     implementation(libs.amap.map)
-    implementation(libs.amap.search)
+    // 搜索 SDK 与 3dmap 10.0.600 重复打包了 AMapUtilCoreApi / NetProxy 两个类，
+    // 这里用剥掉这两个类的本地 jar（其余 632 个类原样保留）
+    implementation(files("libs/amap-search-9.7.1-slim.jar"))
     implementation(libs.coil.compose)
 
     testImplementation(libs.junit)

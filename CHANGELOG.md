@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-03
+
+### Fixed
+
+- 修复地图选点后「使用此地点」闪退：高德地图 SDK 由 9.8.3 升级到 10.0.600，
+  9.8.3 的 native 库在 Android 16 上销毁 GL 引擎会二次执行 nativeDestroy 导致 SIGABRT
+- 修复选点页拿不到「附近地点」：逆地理请求漏了 `extensions=all`，返回里没有 POI
+
+### Changed
+
+- 选点页检索半径 200m → 500m，按距离排序取最近 20 个 POI，标签取最近的一个
+- 地图默认缩放 17 → 18
+
+### Notes
+
+- 10.0.600 与搜索 SDK 9.7.1 重复打包两个类，使用剥离后的本地 jar
+  `app/libs/amap-search-9.7.1-slim.jar`
+
 ## [1.1.0] - 2026-11-03
 
 ### Added

@@ -10,16 +10,12 @@ import androidx.navigation.navArgument
 import com.example.myapplication.AppContainer
 import com.example.myapplication.ui.camera.CameraScreen
 import com.example.myapplication.ui.composer.ComposerScreen
-import com.example.myapplication.ui.composer.PICKED_PLACE_KEY
-import com.example.myapplication.ui.composer.encodePickedPlace
 import com.example.myapplication.ui.feed.FeedScreen
-import com.example.myapplication.ui.location.LocationPickerScreen
 
 private object Routes {
     const val FEED = "feed"
     const val CAPTURE = "capture"
     const val COMPOSE = "compose"
-    const val PICK_PLACE = "pickPlace"
 }
 
 @Composable
@@ -52,39 +48,10 @@ fun AppNavHost(container: AppContainer) {
             ComposerScreen(
                 photoPath = entry.arguments?.getString("photo").orEmpty(),
                 container = container,
-                savedStateHandle = entry.savedStateHandle,
                 onClose = { navController.popBackStack() },
                 onPublished = { navController.popBackStack(Routes.FEED, inclusive = false) },
-                onPickPlace = { latitude, longitude ->
-                    navController.navigate("${Routes.PICK_PLACE}?lat=$latitude&lng=$longitude")
-                },
             )
         }
 
-        composable(
-            route = "${Routes.PICK_PLACE}?lat={lat}&lng={lng}",
-            arguments = listOf(
-                navArgument("lat") {
-                    type = NavType.StringType
-                    defaultValue = "0"
-                },
-                navArgument("lng") {
-                    type = NavType.StringType
-                    defaultValue = "0"
-                },
-            ),
-        ) { entry ->
-            LocationPickerScreen(
-                initialLatitude = entry.arguments?.getString("lat")?.toDoubleOrNull() ?: 0.0,
-                initialLongitude = entry.arguments?.getString("lng")?.toDoubleOrNull() ?: 0.0,
-                container = container,
-                onClose = { navController.popBackStack() },
-                onPicked = { place ->
-                    navController.previousBackStackEntry?.savedStateHandle
-                        ?.set(PICKED_PLACE_KEY, encodePickedPlace(place))
-                    navController.popBackStack()
-                },
-            )
-        }
     }
 }

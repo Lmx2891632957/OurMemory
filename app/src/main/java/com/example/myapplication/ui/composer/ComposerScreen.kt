@@ -1,7 +1,7 @@
 package com.example.myapplication.ui.composer
 
 import android.Manifest
-import android.net.Uri
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -52,37 +52,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.myapplication.AppContainer
 import com.example.myapplication.data.PlaceSelection
 import com.example.myapplication.ui.components.hasPermission
+import com.example.myapplication.ui.location.LocationPickerActivity
 import java.io.File
-
-const val PICKED_PLACE_KEY = "picked_place"
-
-fun encodePickedPlace(place: PlaceSelection): String =
-    "${place.latitude}|${place.longitude}|${Uri.encode(place.label)}"
-
-fun decodePickedPlace(encoded: String): PlaceSelection? {
-    val parts = encoded.split("|", limit = 3)
-    if (parts.size != 3) return null
-    val lat = parts[0].toDoubleOrNull() ?: return null
-    val lng = parts[1].toDoubleOrNull() ?: return null
-    return PlaceSelection(lat, lng, Uri.decode(parts[2]))
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComposerScreen(
     photoPath: String,
     container: AppContainer,
-    savedStateHandle: SavedStateHandle,
     onClose: () -> Unit,
     onPublished: () -> Unit,
-    onPickPlace: (Double, Double) -> Unit,
 ) {
     val viewModel: ComposerViewModel = viewModel(
         factory = ComposerViewModel.factory(
@@ -97,6 +81,14 @@ fun ComposerScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var editingLabel by remember { mutableStateOf(false) }
 
+    val placePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            LocationPickerActivity.parseResult(result.data)?.let(viewModel::setPlace)
+        }
+    }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted -> if (granted) viewModel.detectLocation() }
@@ -108,16 +100,6 @@ fun ComposerScreen(
             viewModel.detectLocation()
         } else {
             locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-    }
-
-    // 地图选点页把结果写在当前返回栈的 SavedStateHandle 里
-    LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow<String?>(PICKED_PLACE_KEY, null).collect { encoded ->
-            if (encoded != null) {
-                decodePickedPlace(encoded)?.let(viewModel::setPlace)
-                savedStateHandle[PICKED_PLACE_KEY] = null
-            }
         }
     }
 
@@ -195,7 +177,13 @@ fun ComposerScreen(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 onClick = {
                     val place = state.place
-                    onPickPlace(place?.latitude ?: 0.0, place?.longitude ?: 0.0)
+                    placePickerLauncher.launch(
+                        LocationPickerActivity.intent(
+                            context,
+                            place?.latitude ?: 0.0,
+                            place?.longitude ?: 0.0,
+                        ),
+                    )
                 },
             ) {
                 Row(

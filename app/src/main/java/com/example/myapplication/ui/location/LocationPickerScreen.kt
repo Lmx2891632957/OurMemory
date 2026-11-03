@@ -31,7 +31,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,9 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.MapView
@@ -67,11 +63,11 @@ fun LocationPickerScreen(
     initialLatitude: Double,
     initialLongitude: Double,
     container: AppContainer,
+    onMapViewCreated: (MapView) -> Unit,
     onClose: () -> Unit,
     onPicked: (PlaceSelection) -> Unit,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val hasInitial = initialLatitude != 0.0 || initialLongitude != 0.0
 
@@ -137,21 +133,9 @@ fun LocationPickerScreen(
         resolving = false
     }
 
-    DisposableEffect(lifecycleOwner, mapView) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> mapView?.onResume()
-                Lifecycle.Event.ON_PAUSE -> mapView?.onPause()
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            mapView?.onPause()
-        }
-    }
-
+    // MapView 的 onResume/onPause/onDestroy 由宿主 Activity 统一管理：
+    // 在 Compose 里销毁它会和 View 脱离窗口时高德内部的销毁撞车，导致 GL 线程二次
+    // 执行 nativeDestroy 而 SIGABRT（Pointer tag truncated）。
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -159,7 +143,7 @@ fun LocationPickerScreen(
                 AmapPrivacy.applyCompliance(ctx)
                 MapView(ctx).apply {
                     onCreate(null)
-                    onResume()
+                    onMapViewCreated(this)
                     map.uiSettings.apply {
                         isZoomControlsEnabled = false
                         isCompassEnabled = false
@@ -182,7 +166,6 @@ fun LocationPickerScreen(
                     mapView = this
                 }
             },
-            onRelease = { it.onDestroy() },
         )
 
         // 屏幕正中的固定图钉

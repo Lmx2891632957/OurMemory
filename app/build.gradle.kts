@@ -1,8 +1,17 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+// 高德 Key 放在 local.properties（本机配置，不入库），通过 manifestPlaceholders 注入
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val amapKey: String = localProperties.getProperty("AMAP_KEY").orEmpty()
 
 android {
     namespace = "com.example.myapplication"
@@ -18,6 +27,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        manifestPlaceholders["AMAP_KEY"] = amapKey
     }
 
     buildTypes {
@@ -60,7 +71,10 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    implementation(libs.play.services.location)
+    // 3dmap 9.8.3 自带定位 SDK，且与 search 9.7.1 无重复类；10.0.600 会与 search 冲突
+    implementation(libs.amap.map)
+    implementation(libs.amap.search)
+    // TODO(amap): 地图页替换完成后移除 osmdroid
     implementation(libs.osmdroid.android)
     implementation(libs.coil.compose)
 

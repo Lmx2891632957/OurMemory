@@ -2,128 +2,86 @@ package com.example.myapplication.data.location
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
-import android.os.Bundle
-import android.os.Looper
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
+import android.content.pm.ApplicationInfo
+import com.amap.api.location.AMapLocationClient
+import com.amap.api.location.AMapLocationClientOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
-data class Coordinates(val latitude: Double, val longitude: Double)
+data class Coordinates(
+    val latitude: Double,
+    val longitude: Double,
+    /** 高德定位一次性返回的地址文本，可能为空 */
+    val address: String? = null,
+    /** 定位点所在 POI 名称（如"天安门广场"），可能为空 */
+    val poiName: String? = null,
+) {
+    /** 优先用 POI 名，其次用地址；都没有就返回 null 让调用方走逆地理。 */
+    fun displayLabel(): String? = poiName?.takeIf { it.isNotBlank() }
+        ?: address?.takeIf { it.isNotBlank() }
+}
 
 /**
- * 取"当前位置"，按可用性依次尝试：
- * 1. Google Play 服务的 FusedLocationProvider（最省电、最准）；
- * 2. 系统 LocationManager 的最后已知位置；
- * 3. 系统 LocationManager 的一次实时定位。
- *
- * 国产手机很多没有 GMS，第 1 步会直接失败/抛异常，所以必须有 2、3 兜底。
- * 全部拿不到就返回 null，UI 退化为手动在地图上选点。
+ * 基于高德定位 SDK 的定位实现（国内可用，不依赖 Google Play 服务）：
+ * 高精度模式会混合 GPS / WiFi / 基站，一次调用同时拿到经纬度、地址和 POI 名称。
  */
 class LocationClient(private val context: Context) : LocationSource {
 
-    // GMS 不存在时 getFusedLocationProviderClient 会抛异常，这里提前吃掉
-    private val fusedClient by lazy {
-        runCatching { LocationServices.getFusedLocationProviderClient(context) }.getOrNull()
-    }
-
-    override suspend fun currentCoordinates(timeoutMs: Long): Coordinates? {
-        val fromPlayServices = fusedClient?.let { client ->
-            runCatching { queryFused(client, timeoutMs) }.getOrNull()
-        }
-        return fromPlayServices ?: platformLocation(timeoutMs)
-    }
-
     @SuppressLint("MissingPermission")
-    private suspend fun queryFused(
-        client: com.google.android.gms.location.FusedLocationProviderClient,
-        timeoutMs: Long,
-    ): Coordinates? {
-        val fresh = withTimeoutOrNull(timeoutMs) {
-            suspendCancellableCoroutine<Coordinates?> { cont ->
-                client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                    .addOnSuccessListener { location ->
-                        if (cont.isActive) {
-                            cont.resume(location?.let { Coordinates(it.latitude, it.longitude) })
-                        }
-                    }
-                    .addOnFailureListener {
-                        if (cont.isActive) cont.resume(null)
-                    }
-            }
-        }
-        if (fresh != null) return fresh
+    override suspend fun currentCoordinates(timeoutMs: Long): Coordinates? =
+        withContext(Dispatchers.Main) {
+            // 高德要求：构造任何 SDK 对象前先完成隐私合规声明
+            AmapPrivacy.applyCompliance(context)
 
-        return withTimeoutOrNull(2_000L) {
-            suspendCancellableCoroutine<Coordinates?> { cont ->
-                client.lastLocation
-                    .addOnSuccessListener { location ->
-                        if (cont.isActive) {
-                            cont.resume(location?.let { Coordinates(it.latitude, it.longitude) })
-                        }
-                    }
-                    .addOnFailureListener {
-                        if (cont.isActive) cont.resume(null)
-                    }
-            }
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private suspend fun platformLocation(timeoutMs: Long): Coordinates? =
-        withContext(Dispatchers.IO) {
-            val manager = runCatching {
-                context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-            }.getOrNull() ?: return@withContext null
-
-            val providers = listOf(
-                LocationManager.GPS_PROVIDER,
-                LocationManager.NETWORK_PROVIDER,
-                LocationManager.PASSIVE_PROVIDER,
-            ).filter { provider ->
-                runCatching { manager.isProviderEnabled(provider) }.getOrDefault(false)
-            }
-
-            // 先看最后已知位置，通常瞬间就能拿到
-            for (provider in providers) {
-                val last: Location? = runCatching { manager.getLastKnownLocation(provider) }.getOrNull()
-                if (last != null) return@withContext Coordinates(last.latitude, last.longitude)
-            }
-
-            if (providers.isEmpty()) return@withContext null
-
-            // 再等一次实时定位
             withTimeoutOrNull(timeoutMs) {
-                suspendCancellableCoroutine<Coordinates?> { cont ->
-                    val listener = object : LocationListener {
-                        override fun onLocationChanged(location: Location) {
-                            runCatching { manager.removeUpdates(this) }
-                            if (cont.isActive) {
-                                cont.resume(Coordinates(location.latitude, location.longitude))
-                            }
+                suspendCancellableCoroutine { continuation ->
+                    val client = AMapLocationClient(context)
+                    var finished = false
+
+                    fun finish(result: Coordinates?) {
+                        if (finished) return
+                        finished = true
+                        runCatching { client.stopLocation() }
+                        runCatching { client.onDestroy() }
+                        if (continuation.isActive) continuation.resume(result)
+                    }
+
+                    client.setLocationListener { location ->
+                        when {
+                            location == null -> finish(null)
+                            location.errorCode == 0 -> finish(
+                                Coordinates(
+                                    latitude = location.latitude,
+                                    longitude = location.longitude,
+                                    address = location.address,
+                                    poiName = location.poiName,
+                                ),
+                            )
+                            else -> finish(null)
                         }
-
-                        @Deprecated("Deprecated in Java")
-                        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
-
-                        override fun onProviderEnabled(provider: String) = Unit
-
-                        override fun onProviderDisabled(provider: String) = Unit
                     }
-                    cont.invokeOnCancellation { runCatching { manager.removeUpdates(listener) } }
-                    runCatching {
-                        val provider = providers.first()
-                        manager.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
-                    }.onFailure {
-                        if (cont.isActive) cont.resume(null)
+
+                    val option = AMapLocationClientOption().apply {
+                        locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
+                        isOnceLocation = true
+                        isOnceLocationLatest = true
+                        isNeedAddress = true
+                        // 模拟器调试时允许 mock 定位
+                        isMockEnable = isDebuggable()
+                        httpTimeOut = timeoutMs.coerceIn(3_000L, 30_000L)
                     }
+                    client.setLocationOption(option)
+                    continuation.invokeOnCancellation { finish(null) }
+
+                    runCatching { client.startLocation() }
+                        .onFailure { finish(null) }
                 }
             }
         }
+
+    private fun isDebuggable(): Boolean =
+        (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 }

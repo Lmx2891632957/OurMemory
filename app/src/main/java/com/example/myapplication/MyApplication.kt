@@ -4,6 +4,7 @@ import android.app.Application
 import com.example.myapplication.data.AppDatabase
 import com.example.myapplication.data.PhotoStore
 import com.example.myapplication.data.PostRepository
+import com.example.myapplication.data.location.AmapPrivacy
 import com.example.myapplication.data.location.LocationClient
 import com.example.myapplication.data.location.PlaceResolver
 import java.io.File
@@ -36,5 +37,9 @@ class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // 已同意过隐私条款的用户：启动时补一次高德合规声明（幂等）
+        if (AmapPrivacy.isAgreed(this)) {
+            AmapPrivacy.applyCompliance(this)
+        }
     }
 }

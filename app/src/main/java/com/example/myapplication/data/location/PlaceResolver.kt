@@ -1,109 +1,87 @@
 package com.example.myapplication.data.location
 
 import android.content.Context
-import android.location.Address
-import android.location.Geocoder
-import android.os.Build
+import com.amap.api.services.core.AMapException
+import com.amap.api.services.core.LatLonPoint
+import com.amap.api.services.geocoder.GeocodeResult
+import com.amap.api.services.geocoder.GeocodeSearch
+import com.amap.api.services.geocoder.RegeocodeQuery
+import com.amap.api.services.geocoder.RegeocodeResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.Locale
 import kotlin.coroutines.resume
 
+/** 逆地理结果里的一个附近地点（POI），用于"附近地点"快捷选择。 */
+data class NearbyPlace(
+    val name: String,
+    val address: String,
+    val latitude: Double,
+    val longitude: Double,
+)
+
+data class PlaceDetails(
+    val label: String?,
+    val nearby: List<NearbyPlace> = emptyList(),
+)
+
 /**
- * 经纬度 → 可读地址。
- *
- * 先用系统 Geocoder；如果设备上没有可用的地理编码后端（模拟器、部分国产 ROM、断网），
- * 再退到免 Key 的 Photon（OSM）接口。两者都失败就返回 null，由调用方展示坐标。
+ * 基于高德搜索 SDK 的逆地理编码，返回中文地址 + 附近的 POI 列表。
+ * 失败（网络、Key 未授权、超时）返回空结果，由调用方退化为坐标。
  */
 class PlaceResolver(private val context: Context) : PlaceLabeler {
 
-    override suspend fun labelFor(latitude: Double, longitude: Double): String? {
-        val fromSystem = withTimeoutOrNull(6_000L) {
-            runCatching { systemAddress(latitude, longitude) }.getOrNull()
-        }?.let { readableName(it) }
-        if (fromSystem != null) return fromSystem
+    override suspend fun labelFor(latitude: Double, longitude: Double): String? =
+        detailsFor(latitude, longitude).label
 
-        return withTimeoutOrNull(8_000L) {
-            runCatching { photonLabel(latitude, longitude) }.getOrNull()
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private suspend fun systemAddress(latitude: Double, longitude: Double): Address? =
-        withContext(Dispatchers.IO) {
-            val geocoder = Geocoder(context, Locale.getDefault())
-            val addresses: List<Address> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                suspendCancellableCoroutine { cont ->
-                    geocoder.getFromLocation(
-                        latitude,
-                        longitude,
-                        1,
-                        object : Geocoder.GeocodeListener {
-                            override fun onGeocode(addressList: MutableList<Address>) {
-                                if (cont.isActive) cont.resume(addressList)
-                            }
-
-                            override fun onError(errorMessage: String?) {
-                                if (cont.isActive) cont.resume(emptyList())
-                            }
-                        },
-                    )
-                }
-            } else {
-                geocoder.getFromLocation(latitude, longitude, 1).orEmpty()
-            }
-            addresses.firstOrNull()
+    suspend fun detailsFor(latitude: Double, longitude: Double): PlaceDetails =
+        withContext(Dispatchers.Main) {
+            AmapPrivacy.applyCompliance(context)
+            withTimeoutOrNull(8_000L) {
+                runCatching { query(latitude, longitude) }.getOrNull()
+            } ?: PlaceDetails(label = null)
         }
 
-    private fun readableName(address: Address): String? {
-        val parts = listOfNotNull(
-            address.thoroughfare,
-            address.subLocality?.takeIf { it != address.thoroughfare },
-            address.locality?.takeIf { it != address.subLocality },
-        ).map { it.trim() }.filter { it.isNotEmpty() }
+    private suspend fun query(latitude: Double, longitude: Double): PlaceDetails =
+        suspendCancellableCoroutine { continuation ->
+            val search = GeocodeSearch(context)
+            search.setOnGeocodeSearchListener(object : GeocodeSearch.OnGeocodeSearchListener {
+                override fun onRegeocodeSearched(result: RegeocodeResult?, code: Int) {
+                    if (code != AMapException.CODE_AMAP_SUCCESS || result == null) {
+                        if (continuation.isActive) continuation.resume(PlaceDetails(label = null))
+                        return
+                    }
+                    val regeo = result.regeocodeAddress
+                    val nearby = regeo.pois.orEmpty()
+                        .mapNotNull { poi ->
+                            val point = poi.latLonPoint
+                            val name = poi.title?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                            NearbyPlace(
+                                name = name,
+                                address = poi.snippet.orEmpty(),
+                                latitude = point?.latitude ?: 0.0,
+                                longitude = point?.longitude ?: 0.0,
+                            )
+                        }
+                        .distinctBy { it.name }
+                        .take(8)
 
-        if (parts.isNotEmpty()) return parts.distinct().joinToString(" ")
+                    val label = nearby.firstOrNull()?.name
+                        ?: regeo.formatAddress?.takeIf { it.isNotBlank() }
 
-        return address.getAddressLine(0)?.takeIf { it.isNotBlank() }
-    }
-
-    private suspend fun photonLabel(latitude: Double, longitude: Double): String? =
-        withContext(Dispatchers.IO) {
-            val body = runCatching {
-                val url = URL("https://photon.komoot.io/reverse?lat=$latitude&lon=$longitude&limit=1")
-                val connection = (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 5_000
-                    readTimeout = 5_000
-                    setRequestProperty("User-Agent", "OurMoments/1.0 (Android)")
+                    if (continuation.isActive) {
+                        continuation.resume(PlaceDetails(label = label, nearby = nearby))
+                    }
                 }
-                try {
-                    connection.inputStream.bufferedReader().use { it.readText() }
-                } finally {
-                    connection.disconnect()
+
+                override fun onGeocodeSearched(result: GeocodeResult?, code: Int) = Unit
+            })
+
+            val query = RegeocodeQuery(LatLonPoint(latitude, longitude), 200f, GeocodeSearch.AMAP)
+            runCatching { search.getFromLocationAsyn(query) }
+                .onFailure {
+                    if (continuation.isActive) continuation.resume(PlaceDetails(label = null))
                 }
-            }.getOrNull() ?: return@withContext null
-
-            runCatching {
-                val features = JSONObject(body).optJSONArray("features") ?: return@runCatching null
-                if (features.length() == 0) return@runCatching null
-                val properties = features.getJSONObject(0).getJSONObject("properties")
-                val name = properties.optString("name").takeIf { it.isNotBlank() }
-                val street = properties.optString("street").takeIf { it.isNotBlank() }
-                val houseNumber = properties.optString("housenumber").takeIf { it.isNotBlank() }
-                val locality = properties.optString("locality").takeIf { it.isNotBlank() }
-                val district = properties.optString("district").takeIf { it.isNotBlank() }
-                val city = properties.optString("city").takeIf { it.isNotBlank() }
-
-                name
-                    ?: listOfNotNull(street, houseNumber).joinToString(" ").takeIf { it.isNotBlank() }
-                    ?: locality
-                    ?: district
-                    ?: city
-            }.getOrNull()
         }
 }

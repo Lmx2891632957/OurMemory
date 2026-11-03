@@ -16,6 +16,8 @@ osmdroid = "6.1.20"
 coil = "2.7.0"
 navigationCompose = "2.10.2"
 coroutinesTest = "1.11.0"
+amapMap = "9.8.3"
+amapSearch = "9.7.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -47,6 +49,8 @@ play-services-location = { group = "com.google.android.gms", name = "play-servic
 osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
+amap-map = { group = "com.amap.api", name = "3dmap", version.ref = "amapMap" }
+amap-search = { group = "com.amap.api", name = "search", version.ref = "amapSearch" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -15,7 +15,7 @@ playServicesLocation = "21.4.0"
 coil = "2.7.0"
 navigationCompose = "2.10.2"
 coroutinesTest = "1.11.0"
-amapMap = "9.8.3"
+amapMap = "10.0.600"
 amapSearch = "9.7.1"
 
 [libraries]

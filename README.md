@@ -24,9 +24,9 @@
 | 架构 | 单模块 MVVM，手写 `AppContainer` 做依赖注入 |
 | 数据库 | Room 2.8（KSP 注解处理） |
 | 相机 | CameraX 1.6（core/camera2/lifecycle/view） |
-| 定位 | `FusedLocationProviderClient`，无 GMS 时自动退到系统 `LocationManager` |
-| 地址解析 | 系统 `Geocoder`，失败后回退到免 Key 的 [Photon](https://photon.komoot.io)（OSM） |
-| 地图 | osmdroid + OpenStreetMap.de 瓦片（**不需要 API Key**） |
+| 定位 | 高德定位 SDK（GPS + WiFi + 基站混合，不依赖 Google 服务） |
+| 地址解析 | 高德 `GeocodeSearch`：中文地址 + 附近 POI 列表 |
+| 地图 | 高德地图 SDK（GCJ-02 坐标系，需在 `local.properties` 配置 `AMAP_KEY`） |
 | 图片 | Coil Compose |
 | 导航 | navigation-compose |
 
@@ -55,8 +55,19 @@ app/src/main/java/com/example/myapplication/
 
 ## 运行
 
+### 先配 Key
+
+地图/定位/逆地理都用高德，需要先申请 Key 并写进 `local.properties`（该文件不入库）：
+
+```properties
+AMAP_KEY=你的高德Android Key
+```
+
+Key 的「包名」填 `com.example.myapplication`，「安全码 SHA1」填实际签名 APK 的指纹
+（`./gradlew :app:signingReport` 可查）。换签名后要同步新增 Key。
+
 ### Android Studio
-直接点 Run 即可（`local.properties` 里要指向你的 SDK）。
+直接点 Run 即可（`local.properties` 里要指向你的 SDK）。首次启动会先弹隐私合规页，同意后才会初始化高德 SDK。
 
 ### 命令行
 本项目的 Gradle 守护进程要求 **JDK 25**（见 `gradle/gradle-daemon-jvm.properties`），Android Studio 自带的 JBR 就是 25：
@@ -87,15 +98,16 @@ adb shell am start -n com.example.myapplication/.MainActivity
 ```
 
 > - 模拟器用的是虚拟相机，拍出来是合成画面。
-> - 如果模拟器网络异常，检查 `adb shell settings get global http_proxy`：某些环境会给模拟器塞一个 `127.0.0.1:xxxx` 代理，导致瓦片和地址解析都失败，可用 `adb shell settings put global http_proxy :0` 清掉。
-> - 地图瓦片走 OpenStreetMap.de；地址解析在系统 Geocoder 不可用时会调 Photon。两者都失败时地点显示为「纬度, 经度」，点地点右边的铅笔可以手动改名。
-> - 国产 ROM 如果没有 Google 服务，定位会自动改用系统 LocationManager（GPS/网络定位），不需要 GMS。
+> - **高德定位在模拟器上通常拿不到结果**（没有 SIM/WiFi 基站信息），地图渲染和逆地理可以用固定坐标验证；定位精度请在真机上确认。
+> - 逆地理失败（断网 / Key 未授权）时地点会退化为「纬度, 经度」，点地点右边的铅笔可以手动改名。
+> - 国内网络下不再依赖 Google 服务，无需 GMS。
 
 ## 已知限制（v1 范围）
 
 - 数据只存在本机，没有账号和云端同步，所以还做不到两台手机共享同一条时间线
 - 没有评论、滤镜、视频
-- 地图依赖网络瓦片；完全离线时只能按坐标选点，文字仍可手动填写
+- 地图/逆地理依赖高德服务和网络；完全离线时只能按坐标选点，文字仍可手动填写
+- 高德个人开发者免费配额：逆地理等 LBS 服务 15 万次/月、在线定位 150 万次/月、POI 搜索 5000 次/月（自实名认证起 1 年，超量按量计费）
 
 ## 后续可以加的功能
 

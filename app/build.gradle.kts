@@ -23,12 +23,17 @@ android {
         applicationId = "com.example.myapplication"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         manifestPlaceholders["AMAP_KEY"] = amapKey
+
+        // 高德 SDK 自带 4 个 ABI 的 so，只保留真机常见的两个，APK 从 67MB 降到 ~40MB
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {

@@ -14,6 +14,7 @@
 - 📍 **地点**：进入编辑页自动定位，先显示坐标再解析地址；可以点地点进地图拖动微调，也能手动改名
 - 📝 **发布**：照片（最多 9 张，可继续拍、删除、左右调整顺序）+ 配文 + 时间 + 地点写进本地数据库，按时间倒序展示；新记录发布后自动回到列表顶部
 - ❤️ **信息流**：Facebook 风格卡片，按天分组且分组头吸顶，1/2/3+ 张自适应排版，支持点赞、删除（照片文件一并删除）
+- 🔍 **详情页**：点卡片看大图（左右滑）、完整文字和地点只读地图；右上角删除（二次确认），不做编辑
 - 🔒 **纯本地**：不需要登录；拒绝定位权限也照样能发；误触返回会弹「放弃这条记录？」二次确认
 
 ## 设计文档
@@ -47,19 +48,22 @@ app/src/main/java/com/example/myapplication/
 ├── MyApplication.kt          # Application + AppContainer（数据库/仓库/定位/照片存储）
 ├── MainActivity.kt
 ├── data/
-│   ├── Post.kt               # Room 实体：照片、配文、地点、时间、点赞
+│   ├── Post.kt               # Room 实体：配文、地点、时间、同步字段
+│   ├── PostPhoto.kt          # 每条记录的照片（最多 9 张，按 position 排序）
 │   ├── PostDao.kt
 │   ├── AppDatabase.kt
-│   ├── PostRepository.kt
+│   ├── Migrations.kt         # Room v1 → v2
+│   ├── PostRepository.kt     # 接口 + LocalPostRepository
 │   ├── PhotoStore.kt         # 草稿 → 正式照片的文件管理
 │   ├── PlaceSelection.kt
 │   └── location/             # LocationClient / PlaceResolver + 两个接口（方便测试）
 └── ui/
-    ├── AppNavHost.kt         # feed → capture → compose → pickPlace
-    ├── feed/                 # 信息流
+    ├── AppNavHost.kt         # feed → capture → compose → detail
+    ├── feed/                 # 信息流、按天分组
     ├── camera/               # 相机
-    ├── composer/             # 编辑发布 + 地点行
-    ├── location/             # osmdroid 选点
+    ├── composer/             # 编辑发布 + 多图编辑 + 地点行
+    ├── detail/               # 记录详情（只读 + 删除）
+    ├── location/             # 高德选点 + 只读地点地图
     └── components/           # PostCard、权限工具
 ```
 

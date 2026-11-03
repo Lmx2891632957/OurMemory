@@ -10,12 +10,14 @@ import androidx.navigation.navArgument
 import com.example.myapplication.AppContainer
 import com.example.myapplication.ui.camera.CameraScreen
 import com.example.myapplication.ui.composer.ComposerScreen
+import com.example.myapplication.ui.detail.DetailScreen
 import com.example.myapplication.ui.feed.FeedScreen
 
 private object Routes {
     const val FEED = "feed"
     const val CAPTURE = "capture"
     const val COMPOSE = "compose"
+    const val DETAIL = "detail"
 }
 
 @Composable
@@ -27,6 +29,7 @@ fun AppNavHost(container: AppContainer) {
             FeedScreen(
                 repository = container.postRepository,
                 onAddPhoto = { navController.navigate(Routes.CAPTURE) },
+                onOpenDetail = { postId -> navController.navigate("${Routes.DETAIL}/$postId") },
             )
         }
 
@@ -53,5 +56,16 @@ fun AppNavHost(container: AppContainer) {
             )
         }
 
+        composable(
+            route = "${Routes.DETAIL}/{postId}",
+            arguments = listOf(navArgument("postId") { type = NavType.LongType }),
+        ) { entry ->
+            DetailScreen(
+                postId = entry.arguments?.getLong("postId") ?: 0L,
+                repository = container.postRepository,
+                onBack = { navController.popBackStack() },
+                onDeleted = { navController.popBackStack() },
+            )
+        }
     }
 }

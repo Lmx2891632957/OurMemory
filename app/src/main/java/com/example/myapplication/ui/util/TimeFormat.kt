@@ -2,6 +2,7 @@ package com.example.myapplication.ui.util
 
 import android.text.format.DateUtils
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -14,4 +15,12 @@ fun formatPostTime(createdAt: Long, now: Long = System.currentTimeMillis()): Str
         diff < DateUtils.DAY_IN_MILLIS -> "${diff / DateUtils.HOUR_IN_MILLIS} 小时前"
         else -> SimpleDateFormat("M月d日 HH:mm", Locale.getDefault()).format(Date(createdAt))
     }
+}
+
+/** 详情页标题："11月3日 10:24"，不是今年的补上年份。 */
+fun formatDetailTime(createdAt: Long, now: Long = System.currentTimeMillis()): String {
+    val postYear = Calendar.getInstance().apply { timeInMillis = createdAt }.get(Calendar.YEAR)
+    val currentYear = Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.YEAR)
+    val pattern = if (postYear == currentYear) "M月d日 HH:mm" else "yyyy年M月d日 HH:mm"
+    return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(createdAt))
 }

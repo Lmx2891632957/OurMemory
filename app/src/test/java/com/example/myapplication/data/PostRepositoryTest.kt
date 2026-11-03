@@ -125,6 +125,20 @@ class PostRepositoryTest {
     }
 
     @Test
+    fun `observePost 返回排序后的照片且删除后为 null`() = runTest {
+        repository.create(listOf(draftPhoto("1"), draftPhoto("2")), "详情", null)
+        val stored = repository.observePosts().first().single()
+
+        val loaded = repository.observePost(stored.post.id).first()
+        assertNotNull(loaded)
+        assertEquals(listOf(0, 1), loaded!!.photos.map { it.position })
+
+        repository.delete(stored.post.id)
+
+        assertNull(repository.observePost(stored.post.id).first())
+    }
+
+    @Test
     fun `入库失败时清理已经转正的照片`() = runTest {
         dao.failNextInsert = true
         val draft = draftPhoto()

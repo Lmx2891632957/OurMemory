@@ -16,6 +16,9 @@ interface PostRepository {
     /** 信息流数据源：已过滤软删除，照片按 position 排好序。 */
     fun observePosts(): Flow<List<PostWithPhotos>>
 
+    /** 单条记录（详情页）。记录被删除后发射 null。 */
+    fun observePost(id: Long): Flow<PostWithPhotos?>
+
     /**
      * 把草稿照片转正并写入一条记录，最多 9 张。
      * @return 新记录的 id
@@ -48,6 +51,11 @@ class LocalPostRepository(
     override fun observePosts(): Flow<List<PostWithPhotos>> =
         dao.observeAll().map { items ->
             items.map { item -> item.copy(photos = item.photos.sortedBy(PostPhoto::position)) }
+        }
+
+    override fun observePost(id: Long): Flow<PostWithPhotos?> =
+        dao.observeById(id).map { item ->
+            item?.copy(photos = item.photos.sortedBy(PostPhoto::position))
         }
 
     override suspend fun create(

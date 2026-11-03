@@ -52,6 +52,11 @@
             android:name=".ui.location.LocationPickerActivity"
             android:exported="false"
             android:theme="@style/Theme.MyApplication" />
+
+        <activity
+            android:name=".ui.location.PlaceViewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication" />
     </application>
 
 </manifest>

@@ -73,6 +73,20 @@ class PostDaoTest {
     }
 
     @Test
+    fun observeById_hidesDeletedPost() = runBlocking {
+        val id = dao.insertWithPhotos(
+            post = Post(photoPath = "a.jpg", createdAt = 1L),
+            photos = listOf(PostPhoto(postId = 0, fileName = "a.jpg", position = 0)),
+        )
+
+        assertEquals(1, dao.observeById(id).first()!!.photos.size)
+
+        dao.softDelete(id, 5_000L)
+
+        assertNull(dao.observeById(id).first())
+    }
+
+    @Test
     fun setLiked_updatesRow() = runBlocking {
         val id = dao.insertWithPhotos(
             post = Post(photoPath = "a.jpg", createdAt = 1L),

@@ -36,6 +36,16 @@ class FakePostDao : PostDao {
         )
     }
 
+    override fun observeById(id: Long): Flow<PostWithPhotos?> =
+        combine(posts, photos) { allPosts, allPhotos ->
+            allPosts.firstOrNull { it.id == id && it.deletedAt == null }?.let { post ->
+                PostWithPhotos(
+                    post = post,
+                    photos = allPhotos.filter { it.postId == id },
+                )
+            }
+        }
+
     override suspend fun insert(post: Post): Long {
         if (failNextInsert) {
             failNextInsert = false

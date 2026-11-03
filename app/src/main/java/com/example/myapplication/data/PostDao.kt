@@ -18,6 +18,11 @@ interface PostDao {
     @Query("SELECT * FROM posts WHERE id = :id AND deletedAt IS NULL")
     suspend fun getById(id: Long): PostWithPhotos?
 
+    /** 详情页用：记录被删除后 Flow 会变成 null。 */
+    @Transaction
+    @Query("SELECT * FROM posts WHERE id = :id AND deletedAt IS NULL")
+    fun observeById(id: Long): Flow<PostWithPhotos?>
+
     @Insert
     suspend fun insert(post: Post): Long
 

@@ -38,6 +38,7 @@ import com.example.myapplication.ui.components.PostCard
 fun FeedScreen(
     repository: PostRepository,
     onAddPhoto: () -> Unit,
+    onOpenDetail: (Long) -> Unit,
 ) {
     val viewModel: FeedViewModel = viewModel(factory = FeedViewModel.factory(repository))
     val posts by viewModel.posts.collectAsStateWithLifecycle()
@@ -97,6 +98,7 @@ fun FeedScreen(
                         PostCard(
                             post = item.post,
                             photoFiles = item.photos.map { repository.photoFile(it.fileName) },
+                            onClick = { onOpenDetail(item.post.id) },
                             onToggleLike = { viewModel.toggleLike(item) },
                             onDelete = { viewModel.delete(item) },
                         )

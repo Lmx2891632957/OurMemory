@@ -50,6 +50,7 @@ import java.io.File
 fun PostCard(
     post: Post,
     photoFiles: List<File>,
+    onClick: () -> Unit,
     onToggleLike: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -57,6 +58,7 @@ fun PostCard(
     var confirmDelete by remember { mutableStateOf(false) }
 
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),

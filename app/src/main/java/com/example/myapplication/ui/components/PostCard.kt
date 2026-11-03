@@ -47,7 +47,7 @@ import java.io.File
 @Composable
 fun PostCard(
     post: Post,
-    photoFile: File,
+    photoFile: File?,
     onToggleLike: () -> Unit,
     onDelete: () -> Unit,
 ) {

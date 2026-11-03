@@ -2,6 +2,7 @@ package com.example.myapplication
 
 import android.app.Application
 import com.example.myapplication.data.AppDatabase
+import com.example.myapplication.data.LocalPostRepository
 import com.example.myapplication.data.PhotoStore
 import com.example.myapplication.data.PostRepository
 import com.example.myapplication.data.location.AmapPrivacy
@@ -19,7 +20,7 @@ class AppContainer(application: Application) {
         photoDir = File(application.filesDir, "photos"),
     )
 
-    val postRepository = PostRepository(database.postDao(), photoStore)
+    val postRepository: PostRepository = LocalPostRepository(database.postDao(), photoStore)
     val locationClient = LocationClient(application)
     val placeResolver = PlaceResolver(application)
 

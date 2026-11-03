@@ -2,9 +2,9 @@ package com.example.myapplication.ui.composer
 
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.FakePostDao
+import com.example.myapplication.data.LocalPostRepository
 import com.example.myapplication.data.PhotoStore
 import com.example.myapplication.data.PlaceSelection
-import com.example.myapplication.data.PostRepository
 import com.example.myapplication.data.location.Coordinates
 import com.example.myapplication.data.location.LocationSource
 import com.example.myapplication.data.location.PlaceLabeler
@@ -70,7 +70,7 @@ class ComposerViewModelTest {
     ): ComposerViewModel {
         val viewModel = ComposerViewModel(
             photoPath = draft.absolutePath,
-            repository = PostRepository(dao, PhotoStore(drafts, photos), dispatcher),
+            repository = LocalPostRepository(dao, PhotoStore(drafts, photos), dispatcher),
             locationClient = source,
             placeResolver = labeler,
         )
@@ -123,10 +123,12 @@ class ComposerViewModelTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.published)
-        val stored = dao.items.value.single()
+        val stored = dao.posts.value.single()
         assertEquals("今天去公园", stored.caption)
         assertEquals("朝阳公园", stored.placeLabel)
-        assertTrue(File(photos, stored.photoPath).exists())
+        val photo = dao.photos.value.single()
+        assertEquals(stored.id, photo.postId)
+        assertTrue(File(photos, photo.fileName).exists())
     }
 
     @Test

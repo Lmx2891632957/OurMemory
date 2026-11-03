@@ -3,8 +3,8 @@ package com.example.myapplication.ui.feed
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.data.Post
 import com.example.myapplication.data.PostRepository
+import com.example.myapplication.data.PostWithPhotos
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -12,18 +12,18 @@ import kotlinx.coroutines.launch
 
 class FeedViewModel(private val repository: PostRepository) : ViewModel() {
 
-    val posts: StateFlow<List<Post>> = repository.posts.stateIn(
+    val posts: StateFlow<List<PostWithPhotos>> = repository.observePosts().stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = emptyList(),
     )
 
-    fun toggleLike(post: Post) {
-        viewModelScope.launch { repository.setLiked(post.id, !post.liked) }
+    fun toggleLike(item: PostWithPhotos) {
+        viewModelScope.launch { repository.setLiked(item.post.id, !item.post.liked) }
     }
 
-    fun delete(post: Post) {
-        viewModelScope.launch { repository.delete(post) }
+    fun delete(item: PostWithPhotos) {
+        viewModelScope.launch { repository.delete(item.post.id) }
     }
 
     companion object {

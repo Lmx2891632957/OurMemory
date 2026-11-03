@@ -41,8 +41,8 @@ fun FeedScreen(
 
     // 新记录插到列表最前面时，如果用户本来就在顶部附近，就把视图滚回顶部，
     // 否则 LazyColumn 会按 key 锚定旧记录，导致新记录的头部被顶出屏幕。
-    LaunchedEffect(posts.firstOrNull()?.id) {
-        val newestId = posts.firstOrNull()?.id
+    LaunchedEffect(posts.firstOrNull()?.post?.id) {
+        val newestId = posts.firstOrNull()?.post?.id
         if (newestId != null && listState.firstVisibleItemIndex <= 1) {
             listState.animateScrollToItem(0)
         }
@@ -72,12 +72,12 @@ fun FeedScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(posts, key = { it.id }) { post ->
+                items(posts, key = { it.post.id }) { item ->
                     PostCard(
-                        post = post,
-                        photoFile = repository.photoFile(post),
-                        onToggleLike = { viewModel.toggleLike(post) },
-                        onDelete = { viewModel.delete(post) },
+                        post = item.post,
+                        photoFile = item.photos.firstOrNull()?.let { repository.photoFile(it.fileName) },
+                        onToggleLike = { viewModel.toggleLike(item) },
+                        onDelete = { viewModel.delete(item) },
                     )
                 }
             }

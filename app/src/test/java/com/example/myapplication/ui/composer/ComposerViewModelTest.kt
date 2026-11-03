@@ -163,4 +163,102 @@ class ComposerViewModelTest {
 
         assertFalse(draft.exists())
     }
+
+    @Test
+    fun `追加照片最多九张`() = runTest(dispatcher) {
+        val viewModel = newViewModel()
+        repeat(8) { index ->
+            viewModel.addPhoto(File(drafts, "extra-$index.jpg").apply { writeText("jpeg") }.absolutePath)
+        }
+
+        assertEquals(ComposerViewModel.MAX_PHOTOS, viewModel.uiState.photoPaths.size)
+
+        val tenth = File(drafts, "extra-9.jpg").apply { writeText("jpeg") }
+        viewModel.addPhoto(tenth.absolutePath)
+
+        assertEquals(ComposerViewModel.MAX_PHOTOS, viewModel.uiState.photoPaths.size)
+        assertTrue(viewModel.uiState.message?.contains("9") == true)
+    }
+
+    @Test
+    fun `删除一张会同时删掉草稿文件`() = runTest(dispatcher) {
+        val draft = draftPhoto()
+        val second = File(drafts, "second.jpg").apply { writeText("jpeg") }
+        val viewModel = newViewModel(draft = draft)
+        viewModel.addPhoto(second.absolutePath)
+
+        viewModel.removePhoto(second.absolutePath)
+
+        assertFalse(second.exists())
+        assertEquals(listOf(draft.absolutePath), viewModel.uiState.photoPaths)
+    }
+
+    @Test
+    fun `前移后移会改变照片顺序`() = runTest(dispatcher) {
+        val first = draftPhoto()
+        val second = File(drafts, "second.jpg").apply { writeText("jpeg") }
+        val third = File(drafts, "third.jpg").apply { writeText("jpeg") }
+        val viewModel = newViewModel(draft = first)
+        viewModel.addPhoto(second.absolutePath)
+        viewModel.addPhoto(third.absolutePath)
+
+        viewModel.movePhoto(2, -1)
+        assertEquals(
+            listOf(first.absolutePath, third.absolutePath, second.absolutePath),
+            viewModel.uiState.photoPaths,
+        )
+
+        viewModel.movePhoto(0, 1)
+        assertEquals(
+            listOf(third.absolutePath, first.absolutePath, second.absolutePath),
+            viewModel.uiState.photoPaths,
+        )
+    }
+
+    @Test
+    fun `发布多图会按编辑顺序写入`() = runTest(dispatcher) {
+        val dao = FakePostDao()
+        val first = draftPhoto()
+        val second = File(drafts, "second.jpg").apply { writeText("jpeg") }
+        val viewModel = newViewModel(draft = first, dao = dao)
+        viewModel.addPhoto(second.absolutePath)
+        viewModel.movePhoto(1, -1)
+
+        viewModel.publish()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.published)
+        val photosInOrder = dao.photos.value.sortedBy { it.position }
+        assertEquals(listOf(0, 1), photosInOrder.map { it.position })
+        assertEquals(2, photosInOrder.map { it.fileName }.toSet().size)
+        photosInOrder.forEach { assertTrue(File(photos, it.fileName).exists()) }
+        assertFalse(first.exists())
+        assertFalse(second.exists())
+    }
+
+    @Test
+    fun `取消编辑会删掉所有草稿照片`() = runTest(dispatcher) {
+        val first = draftPhoto()
+        val second = File(drafts, "second.jpg").apply { writeText("jpeg") }
+        val viewModel = newViewModel(draft = first)
+        viewModel.addPhoto(second.absolutePath)
+
+        viewModel.discardDraft()
+
+        assertFalse(first.exists())
+        assertFalse(second.exists())
+    }
+
+    @Test
+    fun `没有照片时不能发布`() = runTest(dispatcher) {
+        val draft = draftPhoto()
+        val viewModel = newViewModel(draft = draft)
+        viewModel.removePhoto(draft.absolutePath)
+
+        viewModel.publish()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.published)
+        assertEquals("先拍一张照片吧", viewModel.uiState.message)
+    }
 }

@@ -48,6 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -263,18 +265,26 @@ private fun CameraPreviewScreen(
                 .padding(top = 48.dp, start = 16.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onClose) {
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.35f), CircleShape),
+            ) {
                 Icon(Icons.Filled.Close, contentDescription = "关闭", tint = Color.White)
             }
             Spacer(Modifier.weight(1f))
             if (hasBackCamera && hasFrontCamera) {
-                IconButton(onClick = {
-                    lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                        CameraSelector.LENS_FACING_FRONT
-                    } else {
-                        CameraSelector.LENS_FACING_BACK
-                    }
-                }) {
+                IconButton(
+                    onClick = {
+                        lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
+                            CameraSelector.LENS_FACING_FRONT
+                        } else {
+                            CameraSelector.LENS_FACING_BACK
+                        }
+                    },
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.35f), CircleShape),
+                ) {
                     Icon(Icons.Filled.Refresh, contentDescription = "切换摄像头", tint = Color.White)
                 }
             }
@@ -303,6 +313,7 @@ private fun CameraPreviewScreen(
                     .border(4.dp, Color.White, CircleShape)
                     .padding(8.dp)
                     .background(if (capturing) Color.LightGray else Color.White, CircleShape)
+                    .semantics { contentDescription = "拍照" }
                     .clickableNoRipple { capture() },
             )
         }

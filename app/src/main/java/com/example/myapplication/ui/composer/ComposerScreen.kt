@@ -5,11 +5,13 @@ import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,12 +20,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -32,6 +38,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -49,13 +56,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.myapplication.AppContainer
 import com.example.myapplication.data.PlaceSelection
+import com.example.myapplication.ui.camera.CameraScreen
 import com.example.myapplication.ui.components.hasPermission
 import com.example.myapplication.ui.location.LocationPickerActivity
 import java.io.File
@@ -80,6 +91,7 @@ fun ComposerScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var editingLabel by remember { mutableStateOf(false) }
+    var showCamera by remember { mutableStateOf(false) }
 
     val placePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -121,7 +133,7 @@ fun ComposerScreen(
     }
     var confirmDiscard by remember { mutableStateOf(false) }
     val requestClose = {
-        if (state.caption.isNotBlank() || state.place != null) {
+        if (state.caption.isNotBlank() || state.place != null || state.photoPaths.size > 1) {
             confirmDiscard = true
         } else {
             discardAndClose()
@@ -151,14 +163,12 @@ fun ComposerScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            AsyncImage(
-                model = File(photoPath),
-                contentDescription = "刚拍的照片",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(340.dp)
-                    .clip(RoundedCornerShape(16.dp)),
+            PhotoEditor(
+                photoPaths = state.photoPaths,
+                editable = !state.publishing && !state.published,
+                onAdd = { showCamera = true },
+                onRemove = viewModel::removePhoto,
+                onMove = viewModel::movePhoto,
             )
 
             OutlinedTextField(
@@ -239,7 +249,7 @@ fun ComposerScreen(
 
             Button(
                 onClick = viewModel::publish,
-                enabled = !state.publishing && !state.published,
+                enabled = !state.publishing && !state.published && state.photoPaths.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -258,6 +268,27 @@ fun ComposerScreen(
             }
 
             Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (showCamera) {
+        Dialog(
+            onDismissRequest = { showCamera = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+            ) {
+                CameraScreen(
+                    onClose = { showCamera = false },
+                    onCaptured = { file ->
+                        viewModel.addPhoto(file.absolutePath)
+                        showCamera = false
+                    },
+                )
+            }
         }
     }
 
@@ -301,5 +332,185 @@ fun ComposerScreen(
                 TextButton(onClick = { editingLabel = false }) { Text("取消") }
             },
         )
+    }
+}
+
+/**
+ * 发布页的照片编辑区：1 张大图、2 张以上九宫格；每张可删、可左右移动，
+ * 追加照片走相机弹窗，最多 [ComposerViewModel.MAX_PHOTOS] 张。
+ */
+@Composable
+private fun PhotoEditor(
+    photoPaths: List<String>,
+    editable: Boolean,
+    onAdd: () -> Unit,
+    onRemove: (String) -> Unit,
+    onMove: (Int, Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when {
+            photoPaths.isEmpty() -> {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(4f / 3f),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "还没有照片",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+
+            photoPaths.size == 1 -> {
+                PhotoTile(
+                    path = photoPaths.first(),
+                    index = 0,
+                    count = 1,
+                    editable = editable,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(4f / 3f),
+                    onRemove = onRemove,
+                    onMove = onMove,
+                )
+            }
+
+            else -> {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    photoPaths.chunked(3).forEachIndexed { rowIndex, row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEachIndexed { columnIndex, path ->
+                                PhotoTile(
+                                    path = path,
+                                    index = rowIndex * 3 + columnIndex,
+                                    count = photoPaths.size,
+                                    editable = editable,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .aspectRatio(1f),
+                                    onRemove = onRemove,
+                                    onMove = onMove,
+                                )
+                            }
+                            repeat(3 - row.size) {
+                                Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        OutlinedButton(
+            onClick = onAdd,
+            enabled = editable && photoPaths.size < ComposerViewModel.MAX_PHOTOS,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                when {
+                    photoPaths.size >= ComposerViewModel.MAX_PHOTOS -> "最多 ${ComposerViewModel.MAX_PHOTOS} 张"
+                    photoPaths.isEmpty() -> "拍一张照片"
+                    else -> "再加一张（${photoPaths.size}/${ComposerViewModel.MAX_PHOTOS}）"
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PhotoTile(
+    path: String,
+    index: Int,
+    count: Int,
+    editable: Boolean,
+    modifier: Modifier,
+    onRemove: (String) -> Unit,
+    onMove: (Int, Int) -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        AsyncImage(
+            model = File(path),
+            contentDescription = "第 ${index + 1} 张照片",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(6.dp)
+                .background(Color.Black.copy(alpha = 0.45f), CircleShape)
+                .padding(horizontal = 6.dp, vertical = 1.dp),
+        ) {
+            Text(
+                text = "${index + 1}",
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+
+        if (editable) {
+            IconButton(
+                onClick = { onRemove(path) },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(2.dp)
+                    .size(30.dp)
+                    .background(Color.Black.copy(alpha = 0.45f), CircleShape),
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "删除第 ${index + 1} 张照片",
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+
+            if (count > 1) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(2.dp)
+                        .background(Color.Black.copy(alpha = 0.35f), CircleShape),
+                ) {
+                    IconButton(
+                        onClick = { onMove(index, -1) },
+                        enabled = index > 0,
+                        modifier = Modifier.size(30.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.KeyboardArrowLeft,
+                            contentDescription = "第 ${index + 1} 张前移",
+                            tint = if (index > 0) Color.White else Color.White.copy(alpha = 0.35f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    IconButton(
+                        onClick = { onMove(index, 1) },
+                        enabled = index < count - 1,
+                        modifier = Modifier.size(30.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.KeyboardArrowRight,
+                            contentDescription = "第 ${index + 1} 张后移",
+                            tint = if (index < count - 1) Color.White else Color.White.copy(alpha = 0.35f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+        }
     }
 }

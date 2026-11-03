@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 数据库升级到 v2：新增 `post_photos` 表（支持多图）与同步预留字段
+  （`remoteId` / `authorId` / `deviceId` / `coordSystem` / `updatedAt` / `deletedAt` / `syncState`）。
+  v1 记录自动迁移，旧照片变成第一张，不丢数据
+
 ## [1.1.1] - 2026-11-03
 
 ### Fixed

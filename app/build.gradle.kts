@@ -51,6 +51,30 @@ android {
     buildFeatures {
         compose = true
     }
+
+    sourceSets {
+        // 导出的 Room schema 作为 androidTest 的 assets，迁移测试从里面读 v1/v2 快照
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+// Room 2.8.5 的测试库要求 kotlinx-serialization 1.8.1，但 navigation 的传递依赖
+// 把 serialization-core 约束在 1.7.3；版本错配会让 MigrationTestHelper 在真机上
+// 抛 AbstractMethodError（GeneratedSerializer.typeParametersSerializers）。
+// 全配置统一到 1.8.1，避免 app 与 test APK 里两个版本混用。
+configurations.configureEach {
+    resolutionStrategy {
+        force(
+            "org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1",
+            "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.8.1",
+            "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1",
+            "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.8.1",
+        )
+    }
 }
 
 dependencies {
@@ -89,6 +113,7 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.room.testing)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

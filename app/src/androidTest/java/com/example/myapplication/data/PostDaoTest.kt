@@ -5,7 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -35,7 +35,7 @@ class PostDaoTest {
     }
 
     @Test
-    fun insertAndObserve_newestFirst() = runTest {
+    fun insertAndObserve_newestFirst() = runBlocking {
         dao.insert(Post(photoPath = "old.jpg", createdAt = 1_000L))
         dao.insert(Post(photoPath = "new.jpg", createdAt = 2_000L))
 
@@ -45,7 +45,7 @@ class PostDaoTest {
     }
 
     @Test
-    fun setLiked_updatesRow() = runTest {
+    fun setLiked_updatesRow() = runBlocking {
         val id = dao.insert(Post(photoPath = "a.jpg", createdAt = 1L))
 
         dao.setLiked(id, true)
@@ -54,7 +54,7 @@ class PostDaoTest {
     }
 
     @Test
-    fun delete_removesRow() = runTest {
+    fun delete_removesRow() = runBlocking {
         val id = dao.insert(Post(photoPath = "a.jpg", createdAt = 1L))
 
         dao.delete(dao.getById(id)!!)

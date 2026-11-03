@@ -43,6 +43,17 @@ class PlaceResolver(private val context: Context) : PlaceLabeler {
             } ?: PlaceDetails(label = null)
         }
 
+    private fun distanceMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        if (lat2 == 0.0 && lng2 == 0.0) return Double.MAX_VALUE
+        val r = 6_371_000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLng = Math.toRadians(lng2 - lng1)
+        val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
+            kotlin.math.cos(Math.toRadians(lat1)) * kotlin.math.cos(Math.toRadians(lat2)) *
+            kotlin.math.sin(dLng / 2) * kotlin.math.sin(dLng / 2)
+        return r * 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
+    }
+
     private suspend fun query(latitude: Double, longitude: Double): PlaceDetails =
         suspendCancellableCoroutine { continuation ->
             val search = GeocodeSearch(context)
@@ -65,7 +76,8 @@ class PlaceResolver(private val context: Context) : PlaceLabeler {
                             )
                         }
                         .distinctBy { it.name }
-                        .take(8)
+                        .sortedBy { distanceMeters(latitude, longitude, it.latitude, it.longitude) }
+                        .take(20)
 
                     val label = nearby.firstOrNull()?.name
                         ?: regeo.formatAddress?.takeIf { it.isNotBlank() }
@@ -78,7 +90,11 @@ class PlaceResolver(private val context: Context) : PlaceLabeler {
                 override fun onGeocodeSearched(result: GeocodeResult?, code: Int) = Unit
             })
 
-            val query = RegeocodeQuery(LatLonPoint(latitude, longitude), 200f, GeocodeSearch.AMAP)
+            // 500 米内多召回一些 POI，再按距离排序，尽量拿到"最近的那栋楼"而不是校区。
+            // extensions 默认是 base（不含 POI），必须设成 all 才有附近地点数据。
+            val query = RegeocodeQuery(LatLonPoint(latitude, longitude), 500f, GeocodeSearch.AMAP).apply {
+                extensions = "all"
+            }
             runCatching { search.getFromLocationAsyn(query) }
                 .onFailure {
                     if (continuation.isActive) continuation.resume(PlaceDetails(label = null))

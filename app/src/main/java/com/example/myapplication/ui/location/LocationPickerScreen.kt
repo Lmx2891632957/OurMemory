@@ -86,7 +86,7 @@ fun LocationPickerScreen(
 
     fun moveTo(latLng: LatLng) {
         center = latLng
-        mapView?.map?.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 17f))
+        mapView?.map?.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 18f))
     }
 
     val recenterToCurrentLocation: () -> Unit = {
@@ -113,7 +113,7 @@ fun LocationPickerScreen(
         if (granted) {
             container.locationClient.currentCoordinates()?.let {
                 center = LatLng(it.latitude, it.longitude)
-                mapView?.map?.moveCamera(CameraUpdateFactory.newLatLngZoom(center, 17f))
+                mapView?.map?.moveCamera(CameraUpdateFactory.newLatLngZoom(center, 18f))
             }
         } else {
             permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -151,7 +151,7 @@ fun LocationPickerScreen(
                         isRotateGesturesEnabled = false
                         isTiltGesturesEnabled = false
                     }
-                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(center, 17f))
+                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(center, 18f))
                     map.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
                         override fun onCameraChange(position: CameraPosition?) = Unit
 

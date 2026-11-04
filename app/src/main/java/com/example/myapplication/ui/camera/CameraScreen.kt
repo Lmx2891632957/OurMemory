@@ -29,14 +29,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,17 +48,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.example.myapplication.ui.components.WarmPrimaryButton
 import com.example.myapplication.ui.components.hasPermission
 import com.example.myapplication.ui.components.openAppSettings
 import com.example.myapplication.ui.components.shouldShowRationale
+import com.example.myapplication.ui.theme.WarmPalette
+import com.example.myapplication.ui.theme.WarmSizes
+import com.example.myapplication.ui.theme.WarmSpacing
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.util.UUID
@@ -113,26 +122,36 @@ private fun CameraPermissionPrompt(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(32.dp),
+            .padding(horizontal = WarmSpacing.xxl),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = "需要相机权限",
             style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
         )
         Text(
             text = "记录生活要用相机拍下这一刻。",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = WarmSpacing.xs, bottom = WarmSpacing.xl),
         )
-        Button(onClick = if (cannotAskAgain) onOpenSettings else onRequest) {
-            Text(if (cannotAskAgain) "去设置里打开" else "授予相机权限")
-        }
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = onClose, colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-            Text("先不拍了", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        WarmPrimaryButton(
+            text = if (cannotAskAgain) "去设置里打开" else "授予相机权限",
+            onClick = if (cannotAskAgain) onOpenSettings else onRequest,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(WarmSpacing.xs))
+        TextButton(
+            onClick = onClose,
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+        ) {
+            Text("先不拍了")
         }
     }
 }
@@ -259,22 +278,31 @@ private fun CameraPreviewScreen(
             },
         )
 
+        // 顶部压暗，保证暖白色返回/翻转按钮在明亮取景下也清楚
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .align(Alignment.TopCenter)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent),
+                    ),
+                ),
+        )
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 48.dp, start = 16.dp, end = 16.dp),
+                .padding(top = 40.dp, start = WarmSpacing.lg, end = WarmSpacing.lg),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.35f), CircleShape),
-            ) {
-                Icon(Icons.Filled.Close, contentDescription = "关闭", tint = Color.White)
+            CameraCircleButton(onClick = onClose) {
+                Icon(Icons.Filled.Close, contentDescription = "关闭", tint = WarmPalette.TextPrimary)
             }
             Spacer(Modifier.weight(1f))
             if (hasBackCamera && hasFrontCamera) {
-                IconButton(
+                CameraCircleButton(
                     onClick = {
                         lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
                             CameraSelector.LENS_FACING_FRONT
@@ -282,24 +310,47 @@ private fun CameraPreviewScreen(
                             CameraSelector.LENS_FACING_BACK
                         }
                     },
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.35f), CircleShape),
                 ) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "切换摄像头", tint = Color.White)
+                    Icon(
+                        Icons.Filled.Refresh,
+                        contentDescription = "切换摄像头",
+                        tint = WarmPalette.TextPrimary,
+                    )
                 }
             }
         }
 
         if (errorMessage != null) {
-            Text(
-                text = errorMessage.orEmpty(),
-                color = Color.White,
-                style = MaterialTheme.typography.bodyMedium,
+            Surface(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(24.dp),
-            )
+                    .padding(WarmSpacing.xl),
+                shape = RoundedCornerShape(WarmSizes.cardRadius),
+                color = WarmPalette.Surface.copy(alpha = 0.94f),
+                shadowElevation = 4.dp,
+            ) {
+                Text(
+                    text = errorMessage.orEmpty(),
+                    color = WarmPalette.TextPrimary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(WarmSpacing.md),
+                )
+            }
         }
+
+        // 底部压暗，让暖色快门在浅色画面上也清楚
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp)
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f)),
+                    ),
+                ),
+        )
 
         Box(
             modifier = Modifier
@@ -309,14 +360,31 @@ private fun CameraPreviewScreen(
         ) {
             Box(
                 modifier = Modifier
-                    .size(76.dp)
-                    .border(4.dp, Color.White, CircleShape)
-                    .padding(8.dp)
-                    .background(if (capturing) Color.LightGray else Color.White, CircleShape)
+                    .size(80.dp)
+                    .border(4.dp, WarmPalette.Surface, CircleShape)
+                    .padding(7.dp)
+                    .background(
+                        if (capturing) WarmPalette.Primary.copy(alpha = 0.55f) else WarmPalette.Primary,
+                        CircleShape,
+                    )
                     .semantics { contentDescription = "拍照" }
                     .clickableNoRipple { capture() },
             )
         }
+    }
+}
+
+@Composable
+private fun CameraCircleButton(
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        shape = CircleShape,
+        color = WarmPalette.Surface.copy(alpha = 0.92f),
+        shadowElevation = 2.dp,
+    ) {
+        IconButton(onClick = onClick, content = content)
     }
 }
 

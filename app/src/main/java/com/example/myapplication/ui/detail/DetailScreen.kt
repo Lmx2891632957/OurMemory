@@ -1,7 +1,6 @@
 package com.example.myapplication.ui.detail
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -23,16 +23,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +40,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -60,11 +58,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.myapplication.data.PostRepository
 import com.example.myapplication.data.PostWithPhotos
+import com.example.myapplication.ui.components.WarmCard
+import com.example.myapplication.ui.components.WarmLikeButton
 import com.example.myapplication.ui.location.PlaceViewActivity
+import com.example.myapplication.ui.theme.WarmPalette
+import com.example.myapplication.ui.theme.WarmSizes
+import com.example.myapplication.ui.theme.WarmSpacing
 import com.example.myapplication.ui.util.formatDetailTime
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailScreen(
     postId: Long,
@@ -89,46 +91,18 @@ fun DetailScreen(
         }
     }
 
+    val content = state as? DetailUiState.Content
+
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        when (state) {
-                            is DetailUiState.Content -> formatDetailTime(state.item.post.createdAt)
-                            else -> "记录"
-                        },
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    if (state is DetailUiState.Content) {
-                        Box {
-                            IconButton(onClick = { menuOpen = true }) {
-                                Icon(Icons.Filled.MoreVert, contentDescription = "更多操作")
-                            }
-                            DropdownMenu(
-                                expanded = menuOpen,
-                                onDismissRequest = { menuOpen = false },
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("删除这条记录") },
-                                    leadingIcon = {
-                                        Icon(Icons.Filled.Delete, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        menuOpen = false
-                                        confirmDelete = true
-                                    },
-                                )
-                            }
-                        }
-                    }
-                },
+            DetailHeader(
+                dateText = content?.let { formatDetailTime(it.item.post.createdAt) },
+                showMenu = content != null,
+                menuOpen = menuOpen,
+                onMenuOpenChange = { menuOpen = it },
+                onDeleteClick = { confirmDelete = true },
+                onBack = onBack,
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -141,7 +115,7 @@ fun DetailScreen(
                         .padding(innerPadding),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -150,15 +124,22 @@ fun DetailScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
-                        .padding(32.dp),
+                        .padding(WarmSpacing.xxl),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "这条记录不在了",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "这条记录不在了",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Text(
+                            text = "可能已经被删除了",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = WarmSpacing.xs),
+                        )
+                    }
                 }
             }
 
@@ -193,18 +174,112 @@ fun DetailScreen(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("删除这条记录？") },
             text = { Text("照片也会一起删掉，不能恢复。") },
             confirmButton = {
-                TextButton(onClick = {
-                    confirmDelete = false
-                    viewModel.delete(onDeleted)
-                }) { Text("删除") }
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        viewModel.delete(onDeleted)
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("删除") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text("取消") }
+                TextButton(
+                    onClick = { confirmDelete = false },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) { Text("取消") }
             },
         )
+    }
+}
+
+@Composable
+private fun DetailHeader(
+    dateText: String?,
+    showMenu: Boolean,
+    menuOpen: Boolean,
+    onMenuOpenChange: (Boolean) -> Unit,
+    onDeleteClick: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+            .padding(horizontal = WarmSpacing.pageHorizontal, vertical = WarmSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 1.dp,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+        Spacer(Modifier.width(WarmSpacing.sm))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "记录详情",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                text = dateText ?: "只看这一刻",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 1.dp),
+            )
+        }
+        if (showMenu) {
+            Box {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 1.dp,
+                ) {
+                    IconButton(onClick = { onMenuOpenChange(true) }) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = "更多操作",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { onMenuOpenChange(false) },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("删除这条记录") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        onClick = {
+                            onMenuOpenChange(false)
+                            onDeleteClick()
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -218,57 +293,69 @@ private fun DetailContent(
 ) {
     val post = item.post
     Column(
-        modifier = modifier
-            .verticalScroll(rememberScrollState()),
+        modifier = modifier.verticalScroll(rememberScrollState()),
     ) {
+        Spacer(Modifier.height(WarmSpacing.xs))
         PhotoPager(photos = item.photos.map { photoFileFor(it.fileName) })
 
         if (post.caption.isNotBlank()) {
             Text(
                 text = post.caption,
                 style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(
+                    horizontal = WarmSpacing.pageHorizontal,
+                    vertical = WarmSpacing.md,
+                ),
             )
+        } else {
+            Spacer(Modifier.height(WarmSpacing.sm))
         }
 
         if (!post.placeLabel.isNullOrBlank()) {
             val hasCoordinates = post.latitude != null && post.longitude != null
-            Surface(
+            WarmCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                    .padding(horizontal = WarmSpacing.pageHorizontal),
+                onClick = if (hasCoordinates) onOpenPlace else null,
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = hasCoordinates, onClick = onOpenPlace)
-                        .padding(16.dp),
+                    modifier = Modifier.padding(WarmSpacing.md),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        Icons.Filled.Place,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Place,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(WarmSpacing.sm))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = post.placeLabel.orEmpty(),
                             style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                         if (post.latitude != null && post.longitude != null) {
                             Text(
                                 text = "%.5f, %.5f".format(post.latitude, post.longitude),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp),
                             )
                         }
                     }
                     if (hasCoordinates) {
                         Icon(
-                            Icons.Filled.KeyboardArrowRight,
+                            imageVector = Icons.Filled.KeyboardArrowRight,
                             contentDescription = "查看地图",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -280,25 +367,20 @@ private fun DetailContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
+                .padding(start = WarmSpacing.xs, end = WarmSpacing.pageHorizontal),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Start,
         ) {
-            IconButton(onClick = onToggleLike) {
-                Icon(
-                    imageVector = if (post.liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    contentDescription = if (post.liked) "取消喜欢" else "喜欢",
-                    tint = if (post.liked) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            WarmLikeButton(liked = post.liked, onToggleLike = onToggleLike)
             Text(
                 text = if (post.liked) "已喜欢" else "喜欢",
                 style = MaterialTheme.typography.labelLarge,
-                color = if (post.liked) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (post.liked) WarmPalette.Heart
+                else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(WarmSpacing.xl))
     }
 }
 
@@ -310,8 +392,10 @@ private fun PhotoPager(photos: List<File>) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = WarmSpacing.pageHorizontal)
             .aspectRatio(4f / 3f)
-            .background(Color.Black),
+            .clip(RoundedCornerShape(WarmSizes.cardRadius))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             AsyncImage(
@@ -326,9 +410,9 @@ private fun PhotoPager(photos: List<File>) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(12.dp),
+                    .padding(WarmSpacing.sm),
                 shape = CircleShape,
-                color = Color.Black.copy(alpha = 0.5f),
+                color = Color.Black.copy(alpha = 0.45f),
             ) {
                 Text(
                     text = "${pagerState.currentPage + 1}/${photos.size}",

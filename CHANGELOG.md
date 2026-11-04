@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- 暖色设计系统（Design Tokens）：燕麦奶白背景、暖杏主色、深可可文字、大圆角与松排版，
+  新增 `WarmCard` / `WarmPrimaryButton` / `WarmAvatar` / `WarmLikeButton` / `WarmDayHeader` 共享组件
+- 设计规范文档 `docs/design-tokens.md`，统一颜色、字体、圆角、间距、阴影与交互约定
+
+### Changed
+
+- 全局主题改为暖色品牌色，并关闭 Android 12+ 动态取色；深色模式改为暖褐夜色版
+- 字号、圆角、间距按设计规范统一（卡片 20dp、页面边距 20dp）
+
 ## [1.2.0] - 2026-11-03
 
 ### Added

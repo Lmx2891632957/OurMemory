@@ -5,6 +5,7 @@ import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -32,21 +34,20 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -67,11 +69,14 @@ import coil.compose.AsyncImage
 import com.example.myapplication.AppContainer
 import com.example.myapplication.data.PlaceSelection
 import com.example.myapplication.ui.camera.CameraScreen
+import com.example.myapplication.ui.components.WarmPrimaryButton
 import com.example.myapplication.ui.components.hasPermission
 import com.example.myapplication.ui.location.LocationPickerActivity
+import com.example.myapplication.ui.theme.WarmPalette
+import com.example.myapplication.ui.theme.WarmSizes
+import com.example.myapplication.ui.theme.WarmSpacing
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComposerScreen(
     photoPath: String,
@@ -142,16 +147,8 @@ fun ComposerScreen(
     BackHandler(onBack = requestClose)
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("新记录") },
-                navigationIcon = {
-                    IconButton(onClick = requestClose) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-            )
-        },
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { ComposerHeader(onClose = requestClose) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Column(
@@ -160,10 +157,10 @@ fun ComposerScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
                 .imePadding()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = WarmSpacing.pageHorizontal),
+            verticalArrangement = Arrangement.spacedBy(WarmSpacing.xl),
         ) {
-            PhotoEditor(
+            PhotoSection(
                 photoPaths = state.photoPaths,
                 editable = !state.publishing && !state.published,
                 onAdd = { showCamera = true },
@@ -171,21 +168,15 @@ fun ComposerScreen(
                 onMove = viewModel::movePhoto,
             )
 
-            OutlinedTextField(
-                value = state.caption,
-                onValueChange = viewModel::updateCaption,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("写点什么") },
-                placeholder = { Text("今天发生了什么？") },
-                minLines = 3,
-                maxLines = 6,
+            CaptionSection(
+                caption = state.caption,
+                onCaptionChange = viewModel::updateCaption,
             )
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                onClick = {
+            LocationSection(
+                locating = state.locating,
+                place = state.place,
+                onPickPlace = {
                     val place = state.place
                     placePickerLauncher.launch(
                         LocationPickerActivity.intent(
@@ -195,79 +186,28 @@ fun ComposerScreen(
                         ),
                     )
                 },
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        Icons.Filled.Place,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        val place = state.place
-                        val coordinates = place?.let { "%.5f, %.5f".format(it.latitude, it.longitude) }
-                        val unresolved = place != null && place.label == coordinates
-                        Text(
-                            text = when {
-                                state.locating -> "正在定位…"
-                                place == null -> "添加地点"
-                                unresolved -> "选中的位置"
-                                else -> place.label
-                            },
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                        if (place != null && !state.locating && unresolved) {
-                            Text(
-                                text = coordinates.orEmpty(),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    if (state.place != null) {
-                        IconButton(onClick = { editingLabel = true }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "修改地点名称")
-                        }
-                    } else {
-                        Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                    }
-                }
+                onEditLabel = { editingLabel = true },
+                onDetectLocation = { viewModel.detectLocation() },
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(WarmSpacing.sm)) {
+                WarmPrimaryButton(
+                    text = "发布",
+                    onClick = viewModel::publish,
+                    enabled = !state.publishing && !state.published && state.photoPaths.isNotEmpty(),
+                    loading = state.publishing,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = "照片和文字只保存在这台手机",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { viewModel.detectLocation() },
-                    enabled = !state.locating,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(if (state.place == null) "用当前定位" else "重新定位")
-                }
-            }
-
-            Button(
-                onClick = viewModel::publish,
-                enabled = !state.publishing && !state.published && state.photoPaths.isNotEmpty(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-            ) {
-                if (state.publishing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("正在发布")
-                } else {
-                    Text("发布")
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(WarmSpacing.xl))
         }
     }
 
@@ -295,16 +235,27 @@ fun ComposerScreen(
     if (confirmDiscard) {
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("放弃这条记录？") },
             text = { Text("照片和文字都不会保存。") },
             confirmButton = {
-                TextButton(onClick = {
-                    confirmDiscard = false
-                    discardAndClose()
-                }) { Text("放弃") }
+                TextButton(
+                    onClick = {
+                        confirmDiscard = false
+                        discardAndClose()
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("放弃") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDiscard = false }) { Text("继续编辑") }
+                TextButton(
+                    onClick = { confirmDiscard = false },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) { Text("继续编辑") }
             },
         )
     }
@@ -313,20 +264,28 @@ fun ComposerScreen(
         var text by remember { mutableStateOf(state.place?.label.orEmpty()) }
         AlertDialog(
             onDismissRequest = { editingLabel = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("地点名称") },
             text = {
-                OutlinedTextField(
+                TextField(
                     value = text,
                     onValueChange = { text = it },
                     singleLine = true,
-                    label = { Text("比如：朝阳公园") },
+                    placeholder = { Text("比如：朝阳公园") },
+                    shape = RoundedCornerShape(WarmSizes.inputRadius),
+                    colors = warmTextFieldColors(),
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.renamePlace(text)
-                    editingLabel = false
-                }) { Text("保存") }
+                TextButton(
+                    onClick = {
+                        viewModel.renamePlace(text)
+                        editingLabel = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) { Text("保存") }
             },
             dismissButton = {
                 TextButton(onClick = { editingLabel = false }) { Text("取消") }
@@ -335,92 +294,330 @@ fun ComposerScreen(
     }
 }
 
-/**
- * 发布页的照片编辑区：1 张大图、2 张以上九宫格；每张可删、可左右移动，
- * 追加照片走相机弹窗，最多 [ComposerViewModel.MAX_PHOTOS] 张。
- */
 @Composable
-private fun PhotoEditor(
+private fun ComposerHeader(onClose: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+            .padding(horizontal = WarmSpacing.pageHorizontal, vertical = WarmSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 1.dp,
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+        Spacer(Modifier.width(WarmSpacing.sm))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "新记录",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                text = "留住这一刻",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 1.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PhotoSection(
     photoPaths: List<String>,
     editable: Boolean,
     onAdd: () -> Unit,
     onRemove: (String) -> Unit,
     onMove: (Int, Int) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        when {
-            photoPaths.isEmpty() -> {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(4f / 3f),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "还没有照片",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
+    Column(verticalArrangement = Arrangement.spacedBy(WarmSpacing.sm)) {
+        SectionLabel(
+            title = "照片",
+            trailing = "${photoPaths.size}/${ComposerViewModel.MAX_PHOTOS}",
+        )
+
+        if (photoPaths.isEmpty()) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(4f / 3f),
+                shape = RoundedCornerShape(WarmSizes.cardRadius),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "还没有照片",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-
-            photoPaths.size == 1 -> {
-                PhotoTile(
-                    path = photoPaths.first(),
-                    index = 0,
-                    count = 1,
-                    editable = editable,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(4f / 3f),
-                    onRemove = onRemove,
-                    onMove = onMove,
-                )
-            }
-
-            else -> {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    photoPaths.chunked(3).forEachIndexed { rowIndex, row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            row.forEachIndexed { columnIndex, path ->
-                                PhotoTile(
-                                    path = path,
-                                    index = rowIndex * 3 + columnIndex,
-                                    count = photoPaths.size,
-                                    editable = editable,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .aspectRatio(1f),
-                                    onRemove = onRemove,
-                                    onMove = onMove,
-                                )
-                            }
-                            repeat(3 - row.size) {
-                                Spacer(Modifier.weight(1f))
-                            }
-                        }
-                    }
-                }
-            }
+        } else {
+            EditorPhotoGrid(
+                photoPaths = photoPaths,
+                editable = editable,
+                onRemove = onRemove,
+                onMove = onMove,
+            )
         }
 
         OutlinedButton(
             onClick = onAdd,
             enabled = editable && photoPaths.size < ComposerViewModel.MAX_PHOTOS,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = CircleShape,
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (editable && photoPaths.size < ComposerViewModel.MAX_PHOTOS) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                } else {
+                    MaterialTheme.colorScheme.outline
+                },
+            ),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = WarmPalette.PrimaryInk,
+                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
         ) {
             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text(
-                when {
+                text = when {
                     photoPaths.size >= ComposerViewModel.MAX_PHOTOS -> "最多 ${ComposerViewModel.MAX_PHOTOS} 张"
                     photoPaths.isEmpty() -> "拍一张照片"
                     else -> "再加一张（${photoPaths.size}/${ComposerViewModel.MAX_PHOTOS}）"
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun CaptionSection(
+    caption: String,
+    onCaptionChange: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(WarmSpacing.sm)) {
+        SectionLabel(title = "写点什么", trailing = "可选")
+        TextField(
+            value = caption,
+            onValueChange = onCaptionChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = {
+                Text(
+                    text = "今天发生了什么？",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            minLines = 4,
+            maxLines = 8,
+            shape = RoundedCornerShape(WarmSizes.inputRadius),
+            textStyle = MaterialTheme.typography.bodyMedium,
+            colors = warmTextFieldColors(),
+        )
+    }
+}
+
+@Composable
+private fun LocationSection(
+    locating: Boolean,
+    place: PlaceSelection?,
+    onPickPlace: () -> Unit,
+    onEditLabel: () -> Unit,
+    onDetectLocation: () -> Unit,
+) {
+    val coordinates = place?.let { "%.5f, %.5f".format(it.latitude, it.longitude) }
+    val unresolved = place != null && place.label == coordinates
+
+    Column(verticalArrangement = Arrangement.spacedBy(WarmSpacing.xs)) {
+        SectionLabel(title = "地点", trailing = "可手动修改")
+
+        Surface(
+            onClick = onPickPlace,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(WarmSizes.cardRadius),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 2.dp,
+        ) {
+            Row(
+                modifier = Modifier.padding(WarmSpacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (locating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Place,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(WarmSpacing.sm))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = when {
+                            locating -> "正在定位…"
+                            place == null -> "添加地点"
+                            unresolved -> "选中的位置"
+                            else -> place.label
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = when {
+                            locating -> "正在获取当前位置"
+                            place == null -> "让记录带上这一刻在哪里"
+                            else -> coordinates.orEmpty()
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                if (place != null) {
+                    IconButton(onClick = onEditLabel) {
+                        Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = "修改地点名称",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        TextButton(
+            onClick = onDetectLocation,
+            enabled = !locating,
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.primary,
+                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+        ) {
+            Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(if (place == null) "用当前定位" else "重新定位")
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(
+    title: String,
+    trailing: String? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.weight(1f))
+        if (trailing != null) {
+            Text(
+                text = trailing,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun warmTextFieldColors() = TextFieldDefaults.colors(
+    focusedContainerColor = MaterialTheme.colorScheme.surface,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+    disabledContainerColor = MaterialTheme.colorScheme.surface,
+    focusedIndicatorColor = Color.Transparent,
+    unfocusedIndicatorColor = Color.Transparent,
+    disabledIndicatorColor = Color.Transparent,
+    cursorColor = WarmPalette.PrimaryInk,
+    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+)
+
+@Composable
+private fun EditorPhotoGrid(
+    photoPaths: List<String>,
+    editable: Boolean,
+    onRemove: (String) -> Unit,
+    onMove: (Int, Int) -> Unit,
+) {
+    if (photoPaths.size == 1) {
+        PhotoTile(
+            path = photoPaths.first(),
+            index = 0,
+            count = 1,
+            editable = editable,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(4f / 3f),
+            onRemove = onRemove,
+            onMove = onMove,
+        )
+        return
+    }
+
+    val columns = if (photoPaths.size == 2 || photoPaths.size == 4) 2 else 3
+    Column(verticalArrangement = Arrangement.spacedBy(WarmSpacing.xs)) {
+        photoPaths.chunked(columns).forEachIndexed { rowIndex, row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(WarmSpacing.xs)) {
+                row.forEachIndexed { columnIndex, path ->
+                    PhotoTile(
+                        path = path,
+                        index = rowIndex * columns + columnIndex,
+                        count = photoPaths.size,
+                        editable = editable,
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f),
+                        onRemove = onRemove,
+                        onMove = onMove,
+                    )
+                }
+                repeat(columns - row.size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
         }
     }
 }
@@ -437,7 +634,7 @@ private fun PhotoTile(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(WarmSizes.imageRadius))
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
         AsyncImage(
